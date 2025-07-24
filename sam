@@ -1,0 +1,95 @@
+📜 Main Script: sam_realsense_pose.py
+Here’s a simplified working version:
+
+python
+Copy
+Edit
+import numpy as np
+import cv2
+import open3d as o3d
+import pyrealsense2 as rs
+import torch
+from segment_anything import sam_model_registry, SamPredictor
+
+# Load SAM model
+sam_checkpoint = "sam_vit_b_01ec64.pth"
+model_type = "vit_b"
+device = "cuda" if torch.cuda.is_available() else "cpu"
+sam = sam_model_registry[model_type](checkpoint=sam_checkpoint).to(device)
+predictor = SamPredictor(sam)
+
+# RealSense init
+pipeline = rs.pipeline()
+cfg = pipeline.start()
+align = rs.align(rs.stream.color)
+
+print("Streaming... Press Ctrl+C to stop")
+
+try:
+    while True:
+        frames = pipeline.wait_for_frames()
+        frames = align.process(frames)
+
+        color_frame = frames.get_color_frame()
+        depth_frame = frames.get_depth_frame()
+
+        if not color_frame or not depth_frame:
+            continue
+
+        color_image = np.asanyarray(color_frame.get_data())
+        depth_image = np.asanyarray(depth_frame.get_data())
+
+        # Run SAM once per loop
+        predictor.set_image(color_image)
+        input_point = np.array([[color_image.shape[1]//2, color_image.shape[0]//2]])
+        input_label = np.array([1])
+        masks, scores, _ = predictor.predict(point_coords=input_point,
+                                             point_labels=input_label,
+                                             multimask_output=False)
+
+        mask = masks[0]
+        masked_depth = np.where(mask, depth_image, 0)
+
+        # Intrinsics
+        profile = depth_frame.profile.as_video_stream_profile()
+        intr = profile.get_intrinsics()
+        fx, fy = intr.fx, intr.fy
+        cx, cy = intr.ppx, intr.ppy
+
+        # Convert to point cloud
+        indices = np.argwhere(masked_depth > 0)
+        points = []
+        for v, u in indices:
+            z = masked_depth[v, u] * 0.001  # mm to m
+            x = (u - cx) * z / fx
+            y = (v - cy) * z / fy
+            points.append([x, y, z])
+        points = np.array(points)
+
+        if len(points) < 50:
+            print("Too few points, skipping...")
+            continue
+
+        # Estimate pose
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points)
+        center = np.mean(points, axis=0)
+        _, vecs = np.linalg.eig(np.cov(points.T))
+
+        print(f"Center: {center}, Principal Axis: {vecs[:,0]}")
+
+        # Visualize
+        o3d.visualization.draw_geometries([pcd])
+
+except KeyboardInterrupt:
+    print("Stopped.")
+
+finally:
+    pipeline.stop()
+🎯 Output
+3D centroid of your object
+
+Principal direction vector (approximate orientation)
+
+Live point cloud visualization
+
