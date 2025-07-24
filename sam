@@ -1,3 +1,32 @@
+🎯 What This Will Do
+✅ Use your RealSense D415 to stream RGB + depth
+✅ Run Segment Anything Model (SAM) on RGB to get the object mask
+✅ Extract the masked point cloud using depth
+✅ Estimate the 3D centroid and principal axes (for approximate pose)
+✅ Visualize the pose using Open3D
+
+🧱 Requirements
+Install these on your Ubuntu (outside Docker):
+
+bash
+Copy
+Edit
+# System dependencies
+sudo apt install python3-opencv python3-pip libgl1-mesa-glx
+
+# Python packages
+pip install torch torchvision torchaudio
+pip install opencv-python numpy matplotlib
+pip install segment-anything
+pip install pyrealsense2
+pip install open3d
+⚠️ For SAM, you also need the ViT checkpoint. Download this:
+
+bash
+Copy
+Edit
+wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth
+
 📜 Main Script: sam_realsense_pose.py
 Here’s a simplified working version:
 
